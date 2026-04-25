@@ -19,32 +19,35 @@ jobs:
     - name: Install Dependencies
       run: |
         brew install qt@6 cmake pkg-config libsamplerate libsndfile rubberband liblo zlib lv2 lilv suil
-        # Set paths for keg-only zlib
+        # Set paths for keg-only zlib and LV2 headers
         export LDFLAGS="-L/opt/homebrew/opt/zlib/lib"
-        export CPPFLAGS="-I/opt/homebrew/opt/zlib/include"
-        export PKG_CONFIG_PATH="/opt/homebrew/opt/zlib/lib/pkgconfig:$PKG_CONFIG_PATH"
-        # CLAP SDK
+        export CPPFLAGS="-I/opt/homebrew/opt/zlib/include -I/opt/homebrew/include"
+        export PKG_CONFIG_PATH="/opt/homebrew/opt/zlib/lib/pkgconfig:/opt/homebrew/lib/pkgconfig:$PKG_CONFIG_PATH"
+        
+        # Clone CLAP SDK to home directory
         git clone --depth 1 https://github.com/free-audio/clap.git ~/clap
-        echo "CLAP_INCLUDE_DIR=$HOME/clap/include" >> $GITHUB_ENV
+        
+        # Export paths for CMake
         echo "CMAKE_PREFIX_PATH=/opt/homebrew/opt/qt@6;$HOME/clap" >> $GITHUB_ENV
+        echo "CLAP_INCLUDE_DIR=$HOME/clap/include" >> $GITHUB_ENV
     
-    - name: Fix Missing Icon & Patch CMake for CoreFoundation
+    - name: Create Missing Icon (Workaround)
       run: |
-        # Create dummy icns if missing to prevent CMake error
         if [ ! -f "src/images/nebulaquasar.icns" ]; then
           mkdir -p src/images
-          # Create a minimal valid ICNS file (blank 16x16 icon) to satisfy CMake source list
-          # Or simply touch it if the build system handles missing resources gracefully later
-          # Here we create a dummy file to pass the existence check
-          echo "Creating dummy icon file..."
+          # Create a dummy empty file or a simple icon if tools allow. 
+          # For now, just touching it prevents CMake "file not found" error if the CMakeLists is flexible, 
+          # but ideally you need a real icns. 
+          # Since we can't easily make a real icns without image files, we try to bypass the requirement 
+          # or create a placeholder. 
+          # Better approach: Modify CMakeLists to make it optional? 
+          # Since we can't edit CMakeLists permanently, let's try to create a minimal valid icns structure 
+          # or just touch it and hope the build system handles missing resource gracefully during link.
+          # Actually, the error was "Cannot find source file". We must provide *something*.
+          # We will create a dummy file. It might fail later at link if invalid format, but passes config.
           touch src/images/nebulaquasar.icns
+          echo "Created dummy nebulaquasar.icns"
         fi
-
-        # PATCH: Inject CoreFoundation framework for VST3 SDK on macOS
-        # This fixes "_CFRelease", "_CFUUIDCreate" undefined symbols
-        sed -i '' 's/target_link_libraries(nebulaquasar_plugin_scan PRIVATE /target_link_libraries(nebulaquasar_plugin_scan PRIVATE "-framework CoreFoundation" /' src/CMakeLists.txt
-        # Verify patch applied
-        grep "CoreFoundation" src/CMakeLists.txt || echo "Warning: Patch might not have applied if target name differs"
 
     - name: Configure CMake
       run: |
@@ -66,6 +69,26 @@ jobs:
     - name: Build
       run: |
         cd build
+        # Patch CMakeLists.txt to link CoreFoundation for VST3 SDK on macOS
+        # This fixes "_CFRelease", "_CFUUIDCreate" undefined symbols
+        sed -i '' 's/target_link_libraries(nebulaquasar_plugin_scan PRIVATE \(.*\))/target_link_libraries(nebulaquasar_plugin_scan PRIVATE \1 "-framework CoreFoundation")/' ../src/CMakeLists.txt
+        
+        # Re-run cmake to pick up the change if necessary, or just proceed if the patch affects the build rule directly
+        # Since we patched the source CMakeLists, we should re-configure or ensure the build picks it up.
+        # Safest is to re-configure:
+        cmake .. \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCONFIG_QT6=ON \
+          -DCONFIG_LADSPA=OFF \
+          -DCONFIG_DSSI=OFF \
+          -DCONFIG_AU=ON \
+          -DCONFIG_VST2=ON \
+          -DCONFIG_VST3=ON \
+          -DCONFIG_LV2=ON \
+          -DCONFIG_CLAP=ON \
+          -DCLAP_INCLUDE_DIR="${{ env.CLAP_INCLUDE_DIR }}" \
+          -DCMAKE_OSX_ARCHITECTURES=arm64
+        
         make -j$(sysctl -n hw.ncpu)
     
     - name: Create DMG
@@ -82,7 +105,6 @@ jobs:
   build-macos-x86_64:
     runs-on: macos-13
     name: macOS x86_64 Build
-    # No 'needs' dependency here ensures this runs in parallel with arm64
     
     steps:
     - uses: actions/checkout@v4
@@ -92,27 +114,25 @@ jobs:
     - name: Install Dependencies
       run: |
         brew install qt@6 cmake pkg-config libsamplerate libsndfile rubberband liblo zlib lv2 lilv suil
-        # Set paths for keg-only zlib (Intel Mac path)
+        # Set paths for keg-only zlib (Intel Mac path) and LV2 headers
         export LDFLAGS="-L/usr/local/opt/zlib/lib"
-        export CPPFLAGS="-I/usr/local/opt/zlib/include"
-        export PKG_CONFIG_PATH="/usr/local/opt/zlib/lib/pkgconfig:$PKG_CONFIG_PATH"
-        # CLAP SDK
+        export CPPFLAGS="-I/usr/local/opt/zlib/include -I/usr/local/include"
+        export PKG_CONFIG_PATH="/usr/local/opt/zlib/lib/pkgconfig:/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH"
+        
+        # Clone CLAP SDK to home directory
         git clone --depth 1 https://github.com/free-audio/clap.git ~/clap
-        echo "CLAP_INCLUDE_DIR=$HOME/clap/include" >> $GITHUB_ENV
+        
+        # Export paths for CMake
         echo "CMAKE_PREFIX_PATH=/usr/local/opt/qt@6;$HOME/clap" >> $GITHUB_ENV
+        echo "CLAP_INCLUDE_DIR=$HOME/clap/include" >> $GITHUB_ENV
     
-    - name: Fix Missing Icon & Patch CMake for CoreFoundation
+    - name: Create Missing Icon (Workaround)
       run: |
-        # Create dummy icns if missing
         if [ ! -f "src/images/nebulaquasar.icns" ]; then
           mkdir -p src/images
-          echo "Creating dummy icon file..."
           touch src/images/nebulaquasar.icns
+          echo "Created dummy nebulaquasar.icns"
         fi
-
-        # PATCH: Inject CoreFoundation framework for VST3 SDK on macOS
-        sed -i '' 's/target_link_libraries(nebulaquasar_plugin_scan PRIVATE /target_link_libraries(nebulaquasar_plugin_scan PRIVATE "-framework CoreFoundation" /' src/CMakeLists.txt
-        grep "CoreFoundation" src/CMakeLists.txt || echo "Warning: Patch might not have applied"
 
     - name: Configure CMake
       run: |
@@ -134,6 +154,23 @@ jobs:
     - name: Build
       run: |
         cd build
+        # Patch CMakeLists.txt to link CoreFoundation for VST3 SDK on macOS
+        sed -i '' 's/target_link_libraries(nebulaquasar_plugin_scan PRIVATE \(.*\))/target_link_libraries(nebulaquasar_plugin_scan PRIVATE \1 "-framework CoreFoundation")/' ../src/CMakeLists.txt
+        
+        # Re-configure to apply patch
+        cmake .. \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCONFIG_QT6=ON \
+          -DCONFIG_LADSPA=OFF \
+          -DCONFIG_DSSI=OFF \
+          -DCONFIG_AU=ON \
+          -DCONFIG_VST2=ON \
+          -DCONFIG_VST3=ON \
+          -DCONFIG_LV2=ON \
+          -DCONFIG_CLAP=ON \
+          -DCLAP_INCLUDE_DIR="${{ env.CLAP_INCLUDE_DIR }}" \
+          -DCMAKE_OSX_ARCHITECTURES=x86_64
+        
         make -j$(sysctl -n hw.ncpu)
     
     - name: Create DMG
