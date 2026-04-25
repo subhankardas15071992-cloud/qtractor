@@ -4,11 +4,8 @@ Nebula Quasar - An Audio/MIDI multi-track sequencer
 Nebula Quasar is an audio/MIDI multi-track sequencer application written
 in C++ with the Qt framework. This software is made by Nebula Audio.
 
-Target platforms are macOS and Windows, where:
-- On macOS: CoreAudio for audio and MIDI infrastructure, supporting 
+Target platform is macOS: CoreAudio for audio and MIDI infrastructure, supporting 
   AudioUnit (AU), VST, VST3, LV2 and CLAP plug-ins.
-- On Windows: WASAPI and WaveRT for audio, supporting native VST, VST3, 
-  LV2 and CLAP plug-ins.
 
 This is a port of Qtractor, originally developed for Linux by rncbc aka 
 Rui Nuno Capela.
@@ -73,10 +70,6 @@ macOS:
 - CoreAudio frameworks (included with macOS)
 - AudioUnitSDK for AU plug-in support
 
-Windows:
-- Microsoft Visual Studio 2019 or later (or MinGW-w64)
-- Windows SDK for WASAPI/WaveRT support
-
 
 Building
 --------
@@ -98,24 +91,6 @@ cmake .. \
 make -j$(sysctl -n hw.ncpu)
 ```
 
-### Windows
-
-```bash
-mkdir build && cd build
-cmake .. ^
-  -DCMAKE_BUILD_TYPE=Release ^
-  -DCONFIG_QT6=ON ^
-  -DCONFIG_LADSPA=OFF ^
-  -DCONFIG_DSSI=OFF ^
-  -DCONFIG_WASAPI=ON ^
-  -DCONFIG_WAVERT=ON ^
-  -DCONFIG_VST2=ON ^
-  -DCONFIG_VST3=ON ^
-  -DCONFIG_LV2=ON ^
-  -DCONFIG_CLAP=ON
-cmake --build . --config Release -j %NUMBER_OF_PROCESSORS%
-```
-
 
 Plug-in Support
 ---------------
@@ -127,14 +102,7 @@ Plug-in Support
 - LV2 - via LV2 SDK and lilv
 - CLAP - via CLAP headers
 
-### Windows
-- VST2 - via VeSTige headers or Steinberg VST SDK
-- VST3 - via Steinberg VST3 SDK
-- LV2 - via LV2 SDK and lilv
-- CLAP - via CLAP headers
-
-Note: LADSPA and DSSI plug-in formats are not supported on macOS or Windows 
-as they are Linux-specific formats.
+Note: LADSPA and DSSI plug-in formats are not supported on macOS as they are Linux-specific formats.
 
 
 License
