@@ -19,61 +19,30 @@ jobs:
     - name: Install Dependencies
       run: |
         brew install qt@6 cmake pkg-config libsamplerate libsndfile rubberband liblo zlib lv2 lilv suil
-        
         # Set paths for keg-only zlib (Intel Mac path)
         export LDFLAGS="-L/usr/local/opt/zlib/lib"
         export CPPFLAGS="-I/usr/local/opt/zlib/include"
         export PKG_CONFIG_PATH="/usr/local/opt/zlib/lib/pkgconfig:$PKG_CONFIG_PATH"
-        
         # CLAP SDK - clone to home directory
         git clone --depth 1 https://github.com/free-audio/clap.git ~/clap
-        
-        # Export environment variables for CMake
         echo "CLAP_INCLUDE_DIR=$HOME/clap/include" >> $GITHUB_ENV
         echo "CMAKE_PREFIX_PATH=/usr/local/opt/qt@6;$HOME/clap" >> $GITHUB_ENV
     
-    - name: Patch CMakeLists.txt for CoreFoundation
+    - name: Patch CMakeLists for CoreFoundation and Missing Icon
       run: |
-        # Fix VST3 linker error: add CoreFoundation framework
-        if [ -f "src/CMakeLists.txt" ]; then
-          # Try to find the target_link_libraries for nebulaquasar_plugin_scan and append CoreFoundation
-          # We use a safe sed replacement that appends the framework if not present
-          sed -i '' 's/\(target_link_libraries.*nebulaquasar_plugin_scan.*\)/\1 "-framework CoreFoundation"/g' src/CMakeLists.txt || true
-          
-          # If the specific pattern wasn't found, we can try appending to the end of the file as a fallback
-          # Check if CoreFoundation was actually added by grepping
-          if ! grep -q "CoreFoundation" src/CMakeLists.txt; then
-            echo "WARNING: Direct sed patch failed. Appending linker flags manually."
-            # Find the line number of add_executable(nebulaquasar_plugin_scan
-            LINE_NUM=$(grep -n "add_executable.*nebulaquasar_plugin_scan" src/CMakeLists.txt | head -1 | cut -d: -f1)
-            if [ -n "$LINE_NUM" ]; then
-              # Insert target_link_libraries right after add_executable
-              sed -i '' "${LINE_NUM}a\\
-target_link_libraries(nebulaquasar_plugin_scan PRIVATE \"-framework CoreFoundation\")
-" src/CMakeLists.txt
-            fi
-          fi
+        # Fix 1: Add CoreFoundation framework for VST3 linker errors on macOS
+        if grep -q "target_link_libraries(nebulaquasar_plugin_scan" src/CMakeLists.txt; then
+          sed -i '' 's/target_link_libraries(nebulaquasar_plugin_scan /target_link_libraries(nebulaquasar_plugin_scan "-framework CoreFoundation" /' src/CMakeLists.txt
         fi
-    
-    - name: Ensure Icon File Exists
-      run: |
-        # Create a dummy icns file if missing to prevent CMake error
-        ICON_PATH="src/images/nebulaquasar.icns"
-        if [ ! -f "$ICON_PATH" ]; then
+        
+        # Fix 2: Create dummy .icns if missing to prevent CMake configuration failure
+        if [ ! -f "src/images/nebulaquasar.icns" ]; then
           mkdir -p src/images
-          # Create a minimal valid ICNS file (empty placeholder) or copy from system
-          # Using a 1px png converted to icns via sips if available, otherwise touch
-          if command -v sips &> /dev/null && command -v iconutil &> /dev/null; then
-            mkdir -p /tmp/icon.iconset
-            sips -z 512 512 /System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericDocumentIcon.icns --out /tmp/icon.iconset/icon_512x512.png 2>/dev/null || touch /tmp/icon.iconset/icon_512x512.png
-            iconutil -c icns /tmp/icon.iconset -o "$ICON_PATH" 2>/dev/null || touch "$ICON_PATH"
-            rm -rf /tmp/icon.iconset
-          else
-            touch "$ICON_PATH"
-          fi
-          echo "Created dummy icon file at $ICON_PATH"
+          # Create a minimal valid ICNS file (empty placeholder) or touch it if CMake only checks existence
+          # Note: A real icon is better, but this prevents the "file not found" error
+          echo "Placeholder" > src/images/nebulaquasar.icns
         fi
-    
+
     - name: Configure CMake
       run: |
         mkdir -p build
@@ -89,7 +58,6 @@ target_link_libraries(nebulaquasar_plugin_scan PRIVATE \"-framework CoreFoundati
           -DCONFIG_LV2=ON \
           -DCONFIG_CLAP=ON \
           -DCLAP_INCLUDE_DIR="${{ env.CLAP_INCLUDE_DIR }}" \
-          -DCMAKE_PREFIX_PATH="${{ env.CMAKE_PREFIX_PATH }}" \
           -DCMAKE_OSX_ARCHITECTURES=x86_64
     
     - name: Build
@@ -100,7 +68,13 @@ target_link_libraries(nebulaquasar_plugin_scan PRIVATE \"-framework CoreFoundati
     - name: Create DMG
       run: |
         cd build
-        hdiutil create -volname "qtractor" -srcfolder "src/qtractor.app" -ov -format UDZO ../qtractor-macOS-x86_64.dmg
+        # Ensure the app bundle exists before creating DMG
+        if [ -d "src/qtractor.app" ]; then
+          hdiutil create -volname "qtractor" -srcfolder "src/qtractor.app" -ov -format UDZO ../qtractor-macOS-x86_64.dmg
+        else
+          echo "Error: qtractor.app not found in build/src"
+          exit 1
+        fi
     
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
