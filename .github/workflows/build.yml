@@ -1,4 +1,4 @@
-name: Build Nebula Quasar
+name: Build qtractor
 
 on:
   push:
@@ -52,13 +52,13 @@ jobs:
     - name: Create DMG
       run: |
         cd build
-        hdiutil create -volname "NebulaQuasar" -srcfolder "src/NebulaQuasar.app" -ov -format UDZO ../NebulaQuasar-macOS-arm64.dmg
+        hdiutil create -volname "qtractor" -srcfolder "src/qtractor.app" -ov -format UDZO ../qtractor-macOS-arm64.dmg
     
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: NebulaQuasar-macOS-arm64
-        path: NebulaQuasar-macOS-arm64.dmg
+        name: qtractor-macOS-arm64
+        path: qtractor-macOS-arm64.dmg
 
   build-macos-x86_64:
     runs-on: macos-13
@@ -105,13 +105,13 @@ jobs:
     - name: Create DMG
       run: |
         cd build
-        hdiutil create -volname "NebulaQuasar" -srcfolder "src/NebulaQuasar.app" -ov -format UDZO ../NebulaQuasar-macOS-x86_64.dmg
+        hdiutil create -volname "qtractor" -srcfolder "src/qtractor.app" -ov -format UDZO ../qtractor-macOS-x86_64.dmg
     
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: NebulaQuasar-macOS-x86_64
-        path: NebulaQuasar-macOS-x86_64.dmg
+        name: qtractor-macOS-x86_64
+        path: qtractor-macOS-x86_64.dmg
 
   build-windows-x86_64:
     runs-on: windows-latest
@@ -148,7 +148,7 @@ jobs:
           -DCONFIG_ASIO=OFF `
           -DCONFIG_VST2=ON `
           -DCONFIG_VST3=ON `
-          -DCONFIG_LV2=ON `
+          -DCONFIG_LV2=OFF `
           -DCONFIG_CLAP=ON `
           -G "Visual Studio 17 2022" `
           -A x64 `
@@ -162,5 +162,5 @@ jobs:
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: NebulaQuasar-Windows-x86_64
+        name: qtractor-Windows-x86_64
         path: build/src/Release/*.exe
