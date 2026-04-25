@@ -1,4 +1,4 @@
-name: Build qtractor (macOS Only)
+name: Build qtractor
 
 on:
   push:
@@ -10,12 +10,11 @@ jobs:
   build-macos-arm64:
     runs-on: macos-latest
     name: macOS ARM64 Build
-    
     steps:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
-    
+
     - name: Install Dependencies
       run: |
         brew install qt@6 cmake pkg-config libsamplerate libsndfile rubberband liblo zlib lv2 lilv suil
@@ -27,27 +26,23 @@ jobs:
         git clone --depth 1 https://github.com/free-audio/clap.git ~/clap
         echo "CLAP_INCLUDE_DIR=$HOME/clap/include" >> $GITHUB_ENV
         echo "CMAKE_PREFIX_PATH=/opt/homebrew/opt/qt@6;$HOME/clap" >> $GITHUB_ENV
-    
-    - name: Fix Missing Resources & Apply Patches
+
+    - name: Patch CMakeLists for Missing Icon and CoreFoundation
       run: |
-        # 1. Create dummy .icns if missing to prevent CMake failure
+        # Fix 1: Create a dummy icns file if missing to prevent CMake configure error
         if [ ! -f "src/images/nebulaquasar.icns" ]; then
           mkdir -p src/images
-          # Create a minimal valid ICNS file header (empty icon but valid structure)
-          # or just touch it if the CMakeLists only checks existence. 
-          # If CMake reads it, we might need a real icon later, but this bypasses the "File not found" error.
-          echo "Creating placeholder icon..."
-          # Using a base64 encoded minimal empty ICNS to be safe
-          echo "ICNSinbd" > src/images/nebulaquasar.icns 
+          touch src/images/nebulaquasar.icns
+          echo "Created dummy nebulaquasar.icns"
         fi
-
-        # 2. Patch src/CMakeLists.txt to link CoreFoundation for VST3 on macOS
-        # This fixes the "_CFRelease" undefined symbol error
-        if [ -f "src/CMakeLists.txt" ]; then
-          sed -i '' 's/target_link_libraries(nebulaquasar_plugin_scan PRIVATE /target_link_libraries(nebulaquasar_plugin_scan PRIVATE "-framework CoreFoundation" /g' src/CMakeLists.txt
-          echo "Applied CoreFoundation patch."
+        
+        # Fix 2: Inject CoreFoundation framework for VST3 FUID generation (fixes _CFRelease errors)
+        # We look for the target_link_libraries for nebulaquasar_plugin_scan and append CoreFoundation
+        if grep -q "nebulaquasar_plugin_scan" src/CMakeLists.txt; then
+          sed -i '' 's/\(target_link_libraries.*nebulaquasar_plugin_scan.*\)/\1 "-framework CoreFoundation"/g' src/CMakeLists.txt
+          echo "Patched src/CMakeLists.txt for CoreFoundation"
         else
-          echo "Warning: src/CMakeLists.txt not found, skipping patch."
+          echo "Could not find nebulaquasar_plugin_scan target to patch, hoping defaults work."
         fi
 
     - name: Configure CMake
@@ -65,27 +60,18 @@ jobs:
           -DCONFIG_LV2=ON \
           -DCONFIG_CLAP=ON \
           -DCLAP_INCLUDE_DIR="${{ env.CLAP_INCLUDE_DIR }}" \
-          -DCMAKE_PREFIX_PATH="${{ env.CMAKE_PREFIX_PATH }}" \
           -DCMAKE_OSX_ARCHITECTURES=arm64
-    
+
     - name: Build
       run: |
         cd build
         make -j$(sysctl -n hw.ncpu)
-    
+
     - name: Create DMG
       run: |
         cd build
-        # Verify app bundle exists before making DMG
-        if [ -d "src/qtractor.app" ]; then
-          hdiutil create -volname "qtractor" -srcfolder "src/qtractor.app" -ov -format UDZO ../qtractor-macOS-arm64.dmg
-        else
-          # Fallback if app name is different (e.g. nebulaquasar.app)
-          ls -R src/
-          echo "Warning: qtractor.app not found, checking for alternatives..."
-          find src -name "*.app" -exec hdiutil create -volname "qtractor" -srcfolder {} -ov -format UDZO ../qtractor-macOS-arm64.dmg \; || true
-        fi
-    
+        hdiutil create -volname "qtractor" -srcfolder "src/qtractor.app" -ov -format UDZO ../qtractor-macOS-arm64.dmg
+
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
@@ -95,12 +81,12 @@ jobs:
   build-macos-x86_64:
     runs-on: macos-13
     name: macOS x86_64 Build
-    
+    # NOTE: Removed 'needs' dependency. This job now runs in parallel with arm64.
     steps:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
-    
+
     - name: Install Dependencies
       run: |
         brew install qt@6 cmake pkg-config libsamplerate libsndfile rubberband liblo zlib lv2 lilv suil
@@ -112,18 +98,20 @@ jobs:
         git clone --depth 1 https://github.com/free-audio/clap.git ~/clap
         echo "CLAP_INCLUDE_DIR=$HOME/clap/include" >> $GITHUB_ENV
         echo "CMAKE_PREFIX_PATH=/usr/local/opt/qt@6;$HOME/clap" >> $GITHUB_ENV
-    
-    - name: Fix Missing Resources & Apply Patches
+
+    - name: Patch CMakeLists for Missing Icon and CoreFoundation
       run: |
-        # 1. Create dummy .icns if missing
+        # Fix 1: Create a dummy icns file if missing
         if [ ! -f "src/images/nebulaquasar.icns" ]; then
           mkdir -p src/images
-          echo "ICNSinbd" > src/images/nebulaquasar.icns
+          touch src/images/nebulaquasar.icns
+          echo "Created dummy nebulaquasar.icns"
         fi
-
-        # 2. Patch src/CMakeLists.txt to link CoreFoundation for VST3
-        if [ -f "src/CMakeLists.txt" ]; then
-          sed -i '' 's/target_link_libraries(nebulaquasar_plugin_scan PRIVATE /target_link_libraries(nebulaquasar_plugin_scan PRIVATE "-framework CoreFoundation" /g' src/CMakeLists.txt
+        
+        # Fix 2: Inject CoreFoundation framework
+        if grep -q "nebulaquasar_plugin_scan" src/CMakeLists.txt; then
+          sed -i '' 's/\(target_link_libraries.*nebulaquasar_plugin_scan.*\)/\1 "-framework CoreFoundation"/g' src/CMakeLists.txt
+          echo "Patched src/CMakeLists.txt for CoreFoundation"
         fi
 
     - name: Configure CMake
@@ -141,23 +129,18 @@ jobs:
           -DCONFIG_LV2=ON \
           -DCONFIG_CLAP=ON \
           -DCLAP_INCLUDE_DIR="${{ env.CLAP_INCLUDE_DIR }}" \
-          -DCMAKE_PREFIX_PATH="${{ env.CMAKE_PREFIX_PATH }}" \
           -DCMAKE_OSX_ARCHITECTURES=x86_64
-    
+
     - name: Build
       run: |
         cd build
         make -j$(sysctl -n hw.ncpu)
-    
+
     - name: Create DMG
       run: |
         cd build
-        if [ -d "src/qtractor.app" ]; then
-          hdiutil create -volname "qtractor" -srcfolder "src/qtractor.app" -ov -format UDZO ../qtractor-macOS-x86_64.dmg
-        else
-          find src -name "*.app" -exec hdiutil create -volname "qtractor" -srcfolder {} -ov -format UDZO ../qtractor-macOS-x86_64.dmg \; || true
-        fi
-    
+        hdiutil create -volname "qtractor" -srcfolder "src/qtractor.app" -ov -format UDZO ../qtractor-macOS-x86_64.dmg
+
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
