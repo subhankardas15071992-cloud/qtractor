@@ -366,10 +366,15 @@ endif ()
 
 if (APPLE)
   set (ICON_FILE ${CMAKE_CURRENT_SOURCE_DIR}/images/${PROJECT_NAME}.icns)
-  list (APPEND SOURCES ${ICON_FILE})
-  set (MACOSX_BUNDLE_ICON_FILE ${PROJECT_NAME}.icns)
-  set_source_files_properties (${ICON_FILE} PROPERTIES
-    MACOSX_PACKAGE_LOCATION Resources)
+  # Only add icon if it exists to prevent configuration errors
+  if (EXISTS ${ICON_FILE})
+    list (APPEND SOURCES ${ICON_FILE})
+    set (MACOSX_BUNDLE_ICON_FILE ${PROJECT_NAME}.icns)
+    set_source_files_properties (${ICON_FILE} PROPERTIES
+      MACOSX_PACKAGE_LOCATION Resources)
+  else ()
+    message (WARNING "Icon file not found: ${ICON_FILE}. Build will proceed without app icon.")
+  endif ()
 endif ()
 
 if (CONFIG_VST3SDK)
@@ -455,6 +460,10 @@ if (APPLE)
   if (CONFIG_AU AND AudioUnitSDK_FOUND)
     target_link_libraries (${PROJECT_NAME} PRIVATE AudioUnitSDK::AudioUnitSDK)
   endif ()
+  
+  # FIX: Link CoreFoundation for VST3 SDK (required for FUID::generate)
+  target_link_libraries (${PROJECT_NAME}_plugin_scan PRIVATE "-framework CoreFoundation")
+  
 elseif (WIN32)
   # Windows WASAPI/WaveRT libraries
   target_link_libraries (${PROJECT_NAME} PRIVATE 
@@ -602,4 +611,3 @@ if (WIN32)
   install (FILES ${QM_FILES}
     DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}/translations)
 endif ()
-
