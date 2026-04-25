@@ -69,10 +69,13 @@ $RECYCLE.BIN/
 *.qmljs
 QmlDebuggingInfo
 
-# VCPKG (Windows)
+# VCPKG (Windows) - ignore the cloned vcpkg directory to keep repo clean
 vcpkg/
 installed/
 downloads/
+
+# CLAP SDK (cloned during build)
+clap/
 
 # Homebrew / MacPorts temporary files
 /opt/homebrew/var/cache/
