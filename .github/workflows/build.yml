@@ -26,8 +26,13 @@ jobs:
         # CLAP SDK
         git clone --depth 1 https://github.com/free-audio/clap.git ~/clap
         echo "CLAP_INCLUDE_DIR=$HOME/clap/include" >> $GITHUB_ENV
-        echo "CMAKE_PREFIX_PATH=/opt/homebrew/opt/qt@6;$HOME/clap" >> $GITHUB_ENV
     
+    - name: Patch CMakeLists for CoreFoundation (macOS VST3 Fix)
+      run: |
+        # Inject CoreFoundation framework into the plugin_scan target link libraries
+        # This fixes the "_CFRelease" undefined symbol error on macOS
+        sed -i '' 's/target_link_libraries(nebulaquasar_plugin_scan PRIVATE ${VST3_SDK}/target_link_libraries(nebulaquasar_plugin_scan PRIVATE ${VST3_SDK} "-framework CoreFoundation")/' src/CMakeLists.txt
+
     - name: Configure CMake
       run: |
         mkdir -p build
@@ -43,14 +48,12 @@ jobs:
           -DCONFIG_LV2=ON \
           -DCONFIG_CLAP=ON \
           -DCLAP_INCLUDE_DIR="${{ env.CLAP_INCLUDE_DIR }}" \
-          -DCMAKE_OSX_ARCHITECTURES=arm64 \
-          -DCMAKE_PREFIX_PATH="${{ env.CMAKE_PREFIX_PATH }}"
+          -DCMAKE_PREFIX_PATH="/opt/homebrew/opt/qt@6" \
+          -DCMAKE_OSX_ARCHITECTURES=arm64
     
     - name: Build
       run: |
         cd build
-        # Explicitly link CoreFoundation if needed, though CMake should handle it if configured right in src/CMakeLists.txt
-        # If this still fails, you might need to patch src/CMakeLists.txt to add Framework::CoreFoundation to nebulaquasar_plugin_scan
         make -j$(sysctl -n hw.ncpu)
     
     - name: Create DMG
@@ -83,7 +86,11 @@ jobs:
         # CLAP SDK
         git clone --depth 1 https://github.com/free-audio/clap.git ~/clap
         echo "CLAP_INCLUDE_DIR=$HOME/clap/include" >> $GITHUB_ENV
-        echo "CMAKE_PREFIX_PATH=/usr/local/opt/qt@6;$HOME/clap" >> $GITHUB_ENV
+
+    - name: Patch CMakeLists for CoreFoundation (macOS VST3 Fix)
+      run: |
+        # Inject CoreFoundation framework into the plugin_scan target link libraries
+        sed -i '' 's/target_link_libraries(nebulaquasar_plugin_scan PRIVATE ${VST3_SDK}/target_link_libraries(nebulaquasar_plugin_scan PRIVATE ${VST3_SDK} "-framework CoreFoundation")/' src/CMakeLists.txt
     
     - name: Configure CMake
       run: |
@@ -100,8 +107,8 @@ jobs:
           -DCONFIG_LV2=ON \
           -DCONFIG_CLAP=ON \
           -DCLAP_INCLUDE_DIR="${{ env.CLAP_INCLUDE_DIR }}" \
-          -DCMAKE_OSX_ARCHITECTURES=x86_64 \
-          -DCMAKE_PREFIX_PATH="${{ env.CMAKE_PREFIX_PATH }}"
+          -DCMAKE_PREFIX_PATH="/usr/local/opt/qt@6" \
+          -DCMAKE_OSX_ARCHITECTURES=x86_64
     
     - name: Build
       run: |
@@ -130,20 +137,13 @@ jobs:
     
     - name: Install Dependencies via vcpkg
       run: |
-        # Clone vcpkg
         git clone https://github.com/microsoft/vcpkg.git --depth 1
         cd vcpkg
         .\bootstrap-vcpkg.bat
-        
-        # Install packages. Note: qtbase and qttools are the main Qt6 packages in vcpkg
+        # Install specific Qt6 components required
         .\vcpkg install qtbase:x64-windows qttools:x64-windows libsndfile:x64-windows rubberband:x64-windows zlib:x64-windows samplerate:x64-windows liblo:x64-windows steinberg-vst3-sdk:x64-windows
-        
-        # Set environment variables
         echo "VCPKG_ROOT=${{ github.workspace }}\vcpkg" >> $env:GITHUB_ENV
-        # Crucial: Point CMAKE_PREFIX_PATH to the installed vcpkg packages so find_package(Qt6) works
-        echo "CMAKE_PREFIX_PATH=${{ github.workspace }}\vcpkg\installed\x64-windows" >> $env:GITHUB_ENV
-        
-        # Download CLAP headers (optional, currently disabled in config)
+        # Download CLAP SDK headers manually
         git clone --depth 1 https://github.com/free-audio/clap.git $env:USERPROFILE\clap
         echo "CLAP_INCLUDE_DIR=$env:USERPROFILE\clap\include" >> $env:GITHUB_ENV
         
@@ -154,6 +154,7 @@ jobs:
       run: |
         mkdir -p build
         cd build
+        # Explicitly set CMAKE_PREFIX_PATH to the vcpkg installed directory to find Qt6
         cmake .. `
           -DCMAKE_BUILD_TYPE=Release `
           -DCONFIG_QT6=ON `
@@ -166,10 +167,10 @@ jobs:
           -DCONFIG_VST3=ON `
           -DCONFIG_LV2=OFF `
           -DCONFIG_CLAP=OFF `
+          -DCMAKE_PREFIX_PATH="${{ github.workspace }}\vcpkg\installed\x64-windows" `
           -G "Visual Studio 17 2022" `
           -A x64 `
-          -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}\vcpkg\scripts\buildsystems\vcpkg.cmake" `
-          -DCMAKE_PREFIX_PATH="${{ env.CMAKE_PREFIX_PATH }}"
+          -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}\vcpkg\scripts\buildsystems\vcpkg.cmake"
     
     - name: Build
       run: |
