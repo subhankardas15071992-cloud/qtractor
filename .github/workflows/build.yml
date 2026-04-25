@@ -1,4 +1,4 @@
-name: Build Nebula Quasar
+name: Build qtractor
 
 on:
   push:
@@ -19,8 +19,12 @@ jobs:
     - name: Install Dependencies
       run: |
         brew install qt@6 cmake pkg-config libsamplerate libsndfile rubberband liblo zlib lv2 lilv suil
-        # CLAP SDK - install from header-only repo
-        git clone --depth 1 https://github.com/u-he/clap.git /tmp/clap
+        # Set paths for keg-only zlib
+        export LDFLAGS="-L/opt/homebrew/opt/zlib/lib"
+        export CPPFLAGS="-I/opt/homebrew/opt/zlib/include"
+        export PKG_CONFIG_PATH="/opt/homebrew/opt/zlib/lib/pkgconfig:$PKG_CONFIG_PATH"
+        # CLAP SDK - use the correct public repo
+        git clone --depth 1 https://github.com/free-audio/clap.git /tmp/clap
         mkdir -p /usr/local/include
         cp -r /tmp/clap/include/clap /usr/local/include/
     
@@ -48,13 +52,13 @@ jobs:
     - name: Create DMG
       run: |
         cd build
-        hdiutil create -volname "NebulaQuasar" -srcfolder "src/NebulaQuasar.app" -ov -format UDZO ../NebulaQuasar-macOS-arm64.dmg
+        hdiutil create -volname "qtractor" -srcfolder "src/qtractor.app" -ov -format UDZO ../qtractor-macOS-arm64.dmg
     
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: NebulaQuasar-macOS-arm64
-        path: NebulaQuasar-macOS-arm64.dmg
+        name: qtractor-macOS-arm64
+        path: qtractor-macOS-arm64.dmg
 
   build-macos-x86_64:
     runs-on: macos-13
@@ -68,8 +72,12 @@ jobs:
     - name: Install Dependencies
       run: |
         brew install qt@6 cmake pkg-config libsamplerate libsndfile rubberband liblo zlib lv2 lilv suil
-        # CLAP SDK - install from header-only repo
-        git clone --depth 1 https://github.com/u-he/clap.git /tmp/clap
+        # Set paths for keg-only zlib (Intel Mac path)
+        export LDFLAGS="-L/usr/local/opt/zlib/lib"
+        export CPPFLAGS="-I/usr/local/opt/zlib/include"
+        export PKG_CONFIG_PATH="/usr/local/opt/zlib/lib/pkgconfig:$PKG_CONFIG_PATH"
+        # CLAP SDK - use the correct public repo
+        git clone --depth 1 https://github.com/free-audio/clap.git /tmp/clap
         mkdir -p /usr/local/include
         cp -r /tmp/clap/include/clap /usr/local/include/
     
@@ -97,13 +105,13 @@ jobs:
     - name: Create DMG
       run: |
         cd build
-        hdiutil create -volname "NebulaQuasar" -srcfolder "src/NebulaQuasar.app" -ov -format UDZO ../NebulaQuasar-macOS-x86_64.dmg
+        hdiutil create -volname "qtractor" -srcfolder "src/qtractor.app" -ov -format UDZO ../qtractor-macOS-x86_64.dmg
     
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: NebulaQuasar-macOS-x86_64
-        path: NebulaQuasar-macOS-x86_64.dmg
+        name: qtractor-macOS-x86_64
+        path: qtractor-macOS-x86_64.dmg
 
   build-windows-x86_64:
     runs-on: windows-latest
@@ -119,7 +127,8 @@ jobs:
         git clone https://github.com/microsoft/vcpkg.git --depth 1
         cd vcpkg
         .\bootstrap-vcpkg.bat
-        .\vcpkg install qtbase:x64-windows qttools:x64-windows libsndfile:x64-windows rubberband:x64-windows zlib:x64-windows lv2:x64-windows lilv:x64-windows suil:x64-windows clap:x64-windows samplerate:x64-windows liblo:x64-windows steinberg-vst3-sdk:x64-windows
+        # Note: lv2, lilv, suil are not available in vcpkg - LV2 support disabled on Windows
+        .\vcpkg install qtbase:x64-windows qttools:x64-windows libsndfile:x64-windows rubberband:x64-windows zlib:x64-windows clap:x64-windows samplerate:x64-windows liblo:x64-windows steinberg-vst3-sdk:x64-windows
         echo "VCPKG_ROOT=${{ github.workspace }}/vcpkg" >> $env:GITHUB_ENV
         
     - name: Setup MSVC
@@ -139,7 +148,7 @@ jobs:
           -DCONFIG_ASIO=OFF `
           -DCONFIG_VST2=ON `
           -DCONFIG_VST3=ON `
-          -DCONFIG_LV2=ON `
+          -DCONFIG_LV2=OFF `
           -DCONFIG_CLAP=ON `
           -G "Visual Studio 17 2022" `
           -A x64 `
@@ -153,5 +162,5 @@ jobs:
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: NebulaQuasar-Windows-x86_64
+        name: qtractor-Windows-x86_64
         path: build/src/Release/*.exe
