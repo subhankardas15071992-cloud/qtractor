@@ -23,10 +23,14 @@ jobs:
         export LDFLAGS="-L/opt/homebrew/opt/zlib/lib"
         export CPPFLAGS="-I/opt/homebrew/opt/zlib/include"
         export PKG_CONFIG_PATH="/opt/homebrew/opt/zlib/lib/pkgconfig:$PKG_CONFIG_PATH"
-        # CLAP SDK - clone to home directory (avoid permission issues)
+        
+        # CLAP SDK
         git clone --depth 1 https://github.com/free-audio/clap.git ~/clap
         echo "CLAP_INCLUDE_DIR=$HOME/clap/include" >> $GITHUB_ENV
-        echo "CMAKE_PREFIX_PATH=$HOME/clap" >> $GITHUB_ENV
+        
+        # Ensure LV2/Lilv/Suil are found by pkg-config (Homebrew sometimes isolates them)
+        export PKG_CONFIG_PATH="/opt/homebrew/opt/lv2/lib/pkgconfig:/opt/homebrew/opt/lilv/lib/pkgconfig:/opt/homebrew/opt/suil/lib/pkgconfig:$PKG_CONFIG_PATH"
+        echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH" >> $GITHUB_ENV
     
     - name: Configure CMake
       run: |
@@ -43,7 +47,8 @@ jobs:
           -DCONFIG_LV2=ON \
           -DCONFIG_CLAP=ON \
           -DCLAP_INCLUDE_DIR="${{ env.CLAP_INCLUDE_DIR }}" \
-          -DCMAKE_OSX_ARCHITECTURES=arm64
+          -DCMAKE_OSX_ARCHITECTURES=arm64 \
+          -DCMAKE_PREFIX_PATH="/opt/homebrew/opt/qt@6;$HOME/clap"
     
     - name: Build
       run: |
@@ -53,7 +58,13 @@ jobs:
     - name: Create DMG
       run: |
         cd build
-        hdiutil create -volname "qtractor" -srcfolder "src/qtractor.app" -ov -format UDZO ../qtractor-macOS-arm64.dmg
+        # Check if app exists before creating DMG
+        if [ -d "src/qtractor.app" ]; then
+          hdiutil create -volname "qtractor" -srcfolder "src/qtractor.app" -ov -format UDZO ../qtractor-macOS-arm64.dmg
+        else
+          echo "Error: qtractor.app not found"
+          exit 1
+        fi
     
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
@@ -73,14 +84,18 @@ jobs:
     - name: Install Dependencies
       run: |
         brew install qt@6 cmake pkg-config libsamplerate libsndfile rubberband liblo zlib lv2 lilv suil
-        # Set paths for keg-only zlib (Intel Mac path)
+        # Set paths for keg-only zlib (Intel)
         export LDFLAGS="-L/usr/local/opt/zlib/lib"
         export CPPFLAGS="-I/usr/local/opt/zlib/include"
         export PKG_CONFIG_PATH="/usr/local/opt/zlib/lib/pkgconfig:$PKG_CONFIG_PATH"
-        # CLAP SDK - clone to home directory (avoid permission issues)
+        
+        # CLAP SDK
         git clone --depth 1 https://github.com/free-audio/clap.git ~/clap
         echo "CLAP_INCLUDE_DIR=$HOME/clap/include" >> $GITHUB_ENV
-        echo "CMAKE_PREFIX_PATH=$HOME/clap" >> $GITHUB_ENV
+        
+        # Ensure LV2/Lilv/Suil are found
+        export PKG_CONFIG_PATH="/usr/local/opt/lv2/lib/pkgconfig:/usr/local/opt/lilv/lib/pkgconfig:/usr/local/opt/suil/lib/pkgconfig:$PKG_CONFIG_PATH"
+        echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH" >> $GITHUB_ENV
     
     - name: Configure CMake
       run: |
@@ -97,7 +112,8 @@ jobs:
           -DCONFIG_LV2=ON \
           -DCONFIG_CLAP=ON \
           -DCLAP_INCLUDE_DIR="${{ env.CLAP_INCLUDE_DIR }}" \
-          -DCMAKE_OSX_ARCHITECTURES=x86_64
+          -DCMAKE_OSX_ARCHITECTURES=x86_64 \
+          -DCMAKE_PREFIX_PATH="/usr/local/opt/qt@6;$HOME/clap"
     
     - name: Build
       run: |
@@ -107,7 +123,12 @@ jobs:
     - name: Create DMG
       run: |
         cd build
-        hdiutil create -volname "qtractor" -srcfolder "src/qtractor.app" -ov -format UDZO ../qtractor-macOS-x86_64.dmg
+        if [ -d "src/qtractor.app" ]; then
+          hdiutil create -volname "qtractor" -srcfolder "src/qtractor.app" -ov -format UDZO ../qtractor-macOS-x86_64.dmg
+        else
+          echo "Error: qtractor.app not found"
+          exit 1
+        fi
     
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
@@ -126,13 +147,21 @@ jobs:
     
     - name: Install Dependencies via vcpkg
       run: |
+        # Clone vcpkg
         git clone https://github.com/microsoft/vcpkg.git --depth 1
         cd vcpkg
         .\bootstrap-vcpkg.bat
-        # Note: lv2, lilv, suil, clap are NOT available in vcpkg - disabled on Windows
+        
+        # Install packages. Note: We use qtbase and qttools. 
+        # vcpkg's Qt doesn't always play nice with generic find_package(Qt), 
+        # so we rely on CMAKE_PREFIX_PATH pointing to the vcpkg installed dir.
         .\vcpkg install qtbase:x64-windows qttools:x64-windows libsndfile:x64-windows rubberband:x64-windows zlib:x64-windows samplerate:x64-windows liblo:x64-windows steinberg-vst3-sdk:x64-windows
+        
+        # Set environment variables
         echo "VCPKG_ROOT=${{ github.workspace }}\vcpkg" >> $env:GITHUB_ENV
-        # Download CLAP SDK headers manually (but keep CONFIG_CLAP=OFF since full support needs more setup)
+        echo "CMAKE_PREFIX_PATH=${{ github.workspace }}\vcpkg\installed\x64-windows" >> $env:GITHUB_ENV
+        
+        # Download CLAP headers manually (optional, since we disable CONFIG_CLAP for now due to build complexity)
         git clone --depth 1 https://github.com/free-audio/clap.git $env:USERPROFILE\clap
         echo "CLAP_INCLUDE_DIR=$env:USERPROFILE\clap\include" >> $env:GITHUB_ENV
         
@@ -157,7 +186,8 @@ jobs:
           -DCONFIG_CLAP=OFF `
           -G "Visual Studio 17 2022" `
           -A x64 `
-          -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}\vcpkg\scripts\buildsystems\vcpkg.cmake"
+          -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}\vcpkg\scripts\buildsystems\vcpkg.cmake" `
+          -DCMAKE_PREFIX_PATH="${{ github.workspace }}\vcpkg\installed\x64-windows"
     
     - name: Build
       run: |
