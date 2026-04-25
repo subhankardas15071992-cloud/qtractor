@@ -8,7 +8,7 @@ on:
 
 jobs:
   build-macos-x86_64:
-    runs-on: macos-13
+    runs-on: macos-15-intel
     name: macOS x86_64 Build
     
     steps:
@@ -26,21 +26,27 @@ jobs:
         # CLAP SDK - clone to home directory
         git clone --depth 1 https://github.com/free-audio/clap.git ~/clap
         echo "CLAP_INCLUDE_DIR=$HOME/clap/include" >> $GITHUB_ENV
-        echo "CMAKE_PREFIX_PATH=/usr/local/opt/qt@6;$HOME/clap" >> $GITHUB_ENV
+        echo "CMAKE_PREFIX_PATH=/usr/local/opt/qt@6:$HOME/clap" >> $GITHUB_ENV
     
     - name: Patch CMakeLists for CoreFoundation and Missing Icon
       run: |
         # Fix 1: Add CoreFoundation framework for VST3 linker errors on macOS
+        # We look for the target_link_libraries line for nebulaquasar_plugin_scan and inject the framework
         if grep -q "target_link_libraries(nebulaquasar_plugin_scan" src/CMakeLists.txt; then
-          sed -i '' 's/target_link_libraries(nebulaquasar_plugin_scan /target_link_libraries(nebulaquasar_plugin_scan "-framework CoreFoundation" /' src/CMakeLists.txt
+          # Use a backup extension to ensure sed works on macOS/Linux consistently in CI
+          sed -i.bak 's/target_link_libraries(nebulaquasar_plugin_scan /target_link_libraries(nebulaquasar_plugin_scan "-framework CoreFoundation" /' src/CMakeLists.txt
+          echo "Successfully patched CMakeLists.txt for CoreFoundation"
+        else
+          echo "Warning: Could not find target_link_libraries(nebulaquasar_plugin_scan in src/CMakeLists.txt"
         fi
         
         # Fix 2: Create dummy .icns if missing to prevent CMake configuration failure
         if [ ! -f "src/images/nebulaquasar.icns" ]; then
           mkdir -p src/images
-          # Create a minimal valid ICNS file (empty placeholder) or touch it if CMake only checks existence
-          # Note: A real icon is better, but this prevents the "file not found" error
-          echo "Placeholder" > src/images/nebulaquasar.icns
+          # Create a minimal valid ICNS file header to satisfy existence checks
+          # ICNS header: 'icns' (4 bytes) + length (4 bytes, big endian, usually 0x00000018 for minimal)
+          printf 'icns\x00\x00\x00\x18' > src/images/nebulaquasar.icns
+          echo "Created dummy nebulaquasar.icns"
         fi
 
     - name: Configure CMake
@@ -73,6 +79,7 @@ jobs:
           hdiutil create -volname "qtractor" -srcfolder "src/qtractor.app" -ov -format UDZO ../qtractor-macOS-x86_64.dmg
         else
           echo "Error: qtractor.app not found in build/src"
+          ls -R src
           exit 1
         fi
     
