@@ -7,9 +7,9 @@ on:
     branches: [ main, master ]
 
 jobs:
-  build-macos-x86_64:
-    runs-on: macos-15-intel
-    name: macOS x86_64 Build
+  build-macos-arm64:
+    runs-on: macos-15
+    name: macOS ARM64 Build
     
     steps:
     - uses: actions/checkout@v4
@@ -19,34 +19,24 @@ jobs:
     - name: Install Dependencies
       run: |
         brew install qt@6 cmake pkg-config libsamplerate libsndfile rubberband liblo zlib lv2 lilv suil
-        # Set paths for keg-only zlib (Intel Mac path)
-        export LDFLAGS="-L/usr/local/opt/zlib/lib"
-        export CPPFLAGS="-I/usr/local/opt/zlib/include"
-        export PKG_CONFIG_PATH="/usr/local/opt/zlib/lib/pkgconfig:$PKG_CONFIG_PATH"
-        # CLAP SDK - clone to home directory
+        # Set paths for keg-only zlib (ARM Mac path)
+        export LDFLAGS="-L/opt/homebrew/opt/zlib/lib"
+        export CPPFLAGS="-I/opt/homebrew/opt/zlib/include"
+        export PKG_CONFIG_PATH="/opt/homebrew/opt/zlib/lib/pkgconfig:$PKG_CONFIG_PATH"
+        # CLAP SDK
         git clone --depth 1 https://github.com/free-audio/clap.git ~/clap
         echo "CLAP_INCLUDE_DIR=$HOME/clap/include" >> $GITHUB_ENV
-        echo "CMAKE_PREFIX_PATH=/usr/local/opt/qt@6:$HOME/clap" >> $GITHUB_ENV
+        echo "CMAKE_PREFIX_PATH=/opt/homebrew/opt/qt@6;$HOME/clap" >> $GITHUB_ENV
     
-    - name: Patch CMakeLists for CoreFoundation and Missing Icon
+    - name: Patch Missing Icon
       run: |
-        # Fix 1: Add CoreFoundation framework for VST3 linker errors on macOS
-        # We look for the target_link_libraries line for nebulaquasar_plugin_scan and inject the framework
-        if grep -q "target_link_libraries(nebulaquasar_plugin_scan" src/CMakeLists.txt; then
-          # Use a backup extension to ensure sed works on macOS/Linux consistently in CI
-          sed -i.bak 's/target_link_libraries(nebulaquasar_plugin_scan /target_link_libraries(nebulaquasar_plugin_scan "-framework CoreFoundation" /' src/CMakeLists.txt
-          echo "Successfully patched CMakeLists.txt for CoreFoundation"
-        else
-          echo "Warning: Could not find target_link_libraries(nebulaquasar_plugin_scan in src/CMakeLists.txt"
-        fi
-        
-        # Fix 2: Create dummy .icns if missing to prevent CMake configuration failure
-        if [ ! -f "src/images/nebulaquasar.icns" ]; then
+        if [ ! -f "src/images/qtractor.icns" ]; then
           mkdir -p src/images
-          # Create a minimal valid ICNS file header to satisfy existence checks
-          # ICNS header: 'icns' (4 bytes) + length (4 bytes, big endian, usually 0x00000018 for minimal)
-          printf 'icns\x00\x00\x00\x18' > src/images/nebulaquasar.icns
-          echo "Created dummy nebulaquasar.icns"
+          # Create a dummy file to satisfy CMake configuration if the real icon is missing
+          # The build might still fail later if the file is truly needed for bundling, 
+          # but this gets past the "file not found" configure error.
+          touch src/images/qtractor.icns
+          echo "Created dummy qtractor.icns"
         fi
 
     - name: Configure CMake
@@ -64,7 +54,8 @@ jobs:
           -DCONFIG_LV2=ON \
           -DCONFIG_CLAP=ON \
           -DCLAP_INCLUDE_DIR="${{ env.CLAP_INCLUDE_DIR }}" \
-          -DCMAKE_OSX_ARCHITECTURES=x86_64
+          -DCMAKE_OSX_ARCHITECTURES=arm64 \
+          -DCMAKE_EXE_LINKER_FLAGS="-framework CoreFoundation"
     
     - name: Build
       run: |
@@ -74,12 +65,78 @@ jobs:
     - name: Create DMG
       run: |
         cd build
-        # Ensure the app bundle exists before creating DMG
+        if [ -d "src/qtractor.app" ]; then
+          hdiutil create -volname "qtractor" -srcfolder "src/qtractor.app" -ov -format UDZO ../qtractor-macOS-arm64.dmg
+        else
+          echo "Error: qtractor.app not found"
+          exit 1
+        fi
+    
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: qtractor-macOS-arm64
+        path: qtractor-macOS-arm64.dmg
+
+  build-macos-x86_64:
+    runs-on: macos-15-intel
+    name: macOS x86_64 Build
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Install Dependencies
+      run: |
+        brew install qt@6 cmake pkg-config libsamplerate libsndfile rubberband liblo zlib lv2 lilv suil
+        # Set paths for keg-only zlib (Intel Mac path)
+        export LDFLAGS="-L/usr/local/opt/zlib/lib"
+        export CPPFLAGS="-I/usr/local/opt/zlib/include"
+        export PKG_CONFIG_PATH="/usr/local/opt/zlib/lib/pkgconfig:$PKG_CONFIG_PATH"
+        # CLAP SDK
+        git clone --depth 1 https://github.com/free-audio/clap.git ~/clap
+        echo "CLAP_INCLUDE_DIR=$HOME/clap/include" >> $GITHUB_ENV
+        echo "CMAKE_PREFIX_PATH=/usr/local/opt/qt@6;$HOME/clap" >> $GITHUB_ENV
+    
+    - name: Patch Missing Icon
+      run: |
+        if [ ! -f "src/images/qtractor.icns" ]; then
+          mkdir -p src/images
+          touch src/images/qtractor.icns
+          echo "Created dummy qtractor.icns"
+        fi
+
+    - name: Configure CMake
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCONFIG_QT6=ON \
+          -DCONFIG_LADSPA=OFF \
+          -DCONFIG_DSSI=OFF \
+          -DCONFIG_AU=ON \
+          -DCONFIG_VST2=ON \
+          -DCONFIG_VST3=ON \
+          -DCONFIG_LV2=ON \
+          -DCONFIG_CLAP=ON \
+          -DCLAP_INCLUDE_DIR="${{ env.CLAP_INCLUDE_DIR }}" \
+          -DCMAKE_OSX_ARCHITECTURES=x86_64 \
+          -DCMAKE_EXE_LINKER_FLAGS="-framework CoreFoundation"
+    
+    - name: Build
+      run: |
+        cd build
+        make -j$(sysctl -n hw.ncpu)
+    
+    - name: Create DMG
+      run: |
+        cd build
         if [ -d "src/qtractor.app" ]; then
           hdiutil create -volname "qtractor" -srcfolder "src/qtractor.app" -ov -format UDZO ../qtractor-macOS-x86_64.dmg
         else
-          echo "Error: qtractor.app not found in build/src"
-          ls -R src
+          echo "Error: qtractor.app not found"
           exit 1
         fi
     
