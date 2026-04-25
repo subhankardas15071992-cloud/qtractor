@@ -69,7 +69,7 @@ $RECYCLE.BIN/
 *.qmljs
 QmlDebuggingInfo
 
-# VCPKG (Windows) - ignore the cloned vcpkg directory to keep repo clean
+# VCPKG (Windows)
 vcpkg/
 installed/
 downloads/
@@ -81,7 +81,7 @@ clap/
 /opt/homebrew/var/cache/
 /usr/local/var/cache/
 
-# LV2 / Plugin caches (if generated locally)
+# LV2 / Plugin caches
 *.lv2
 *.vst3
 *.clap
