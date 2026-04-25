@@ -23,10 +23,10 @@ jobs:
         export LDFLAGS="-L/opt/homebrew/opt/zlib/lib"
         export CPPFLAGS="-I/opt/homebrew/opt/zlib/include"
         export PKG_CONFIG_PATH="/opt/homebrew/opt/zlib/lib/pkgconfig:$PKG_CONFIG_PATH"
-        # CLAP SDK - use the correct repo (free-audio/clap)
-        git clone --depth 1 https://github.com/free-audio/clap.git /tmp/clap
-        mkdir -p /usr/local/include
-        cp -r /tmp/clap/include/clap /usr/local/include/
+        # CLAP SDK - clone to home directory and set include path
+        git clone --depth 1 https://github.com/free-audio/clap.git ~/clap
+        export CMAKE_PREFIX_PATH="$HOME/clap;$CMAKE_PREFIX_PATH"
+        export CLAP_INCLUDE_DIR="$HOME/clap/include"
     
     - name: Configure CMake
       run: |
@@ -42,6 +42,7 @@ jobs:
           -DCONFIG_VST3=ON \
           -DCONFIG_LV2=ON \
           -DCONFIG_CLAP=ON \
+          -DCLAP_INCLUDE_DIR="$HOME/clap/include" \
           -DCMAKE_OSX_ARCHITECTURES=arm64
     
     - name: Build
@@ -76,10 +77,10 @@ jobs:
         export LDFLAGS="-L/usr/local/opt/zlib/lib"
         export CPPFLAGS="-I/usr/local/opt/zlib/include"
         export PKG_CONFIG_PATH="/usr/local/opt/zlib/lib/pkgconfig:$PKG_CONFIG_PATH"
-        # CLAP SDK - use the correct repo (free-audio/clap)
-        git clone --depth 1 https://github.com/free-audio/clap.git /tmp/clap
-        mkdir -p /usr/local/include
-        cp -r /tmp/clap/include/clap /usr/local/include/
+        # CLAP SDK - clone to home directory and set include path
+        git clone --depth 1 https://github.com/free-audio/clap.git ~/clap
+        export CMAKE_PREFIX_PATH="$HOME/clap;$CMAKE_PREFIX_PATH"
+        export CLAP_INCLUDE_DIR="$HOME/clap/include"
     
     - name: Configure CMake
       run: |
@@ -95,6 +96,7 @@ jobs:
           -DCONFIG_VST3=ON \
           -DCONFIG_LV2=ON \
           -DCONFIG_CLAP=ON \
+          -DCLAP_INCLUDE_DIR="$HOME/clap/include" \
           -DCMAKE_OSX_ARCHITECTURES=x86_64
     
     - name: Build
@@ -127,9 +129,13 @@ jobs:
         git clone https://github.com/microsoft/vcpkg.git --depth 1
         cd vcpkg
         .\bootstrap-vcpkg.bat
-        # Note: lv2, lilv, suil are not available in vcpkg - LV2 support disabled on Windows
-        .\vcpkg install qtbase:x64-windows qttools:x64-windows libsndfile:x64-windows rubberband:x64-windows zlib:x64-windows clap:x64-windows samplerate:x64-windows liblo:x64-windows steinberg-vst3-sdk:x64-windows
+        # Note: lv2, lilv, suil, clap are not available in vcpkg - disabled on Windows
+        # CLAP SDK will be downloaded separately
+        .\vcpkg install qtbase:x64-windows qttools:x64-windows libsndfile:x64-windows rubberband:x64-windows zlib:x64-windows samplerate:x64-windows liblo:x64-windows steinberg-vst3-sdk:x64-windows
         echo "VCPKG_ROOT=${{ github.workspace }}/vcpkg" >> $env:GITHUB_ENV
+        # Download CLAP SDK headers manually
+        git clone --depth 1 https://github.com/free-audio/clap.git $env:USERPROFILE\clap
+        echo "CLAP_INCLUDE_DIR=$env:USERPROFILE\clap\include" >> $env:GITHUB_ENV
         
     - name: Setup MSVC
       uses: ilammy/msvc-dev-cmd@v1
@@ -149,7 +155,8 @@ jobs:
           -DCONFIG_VST2=ON `
           -DCONFIG_VST3=ON `
           -DCONFIG_LV2=OFF `
-          -DCONFIG_CLAP=ON `
+          -DCONFIG_CLAP=OFF `
+          -DCLAP_INCLUDE_DIR="$env:USERPROFILE\clap\include" `
           -G "Visual Studio 17 2022" `
           -A x64 `
           -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
