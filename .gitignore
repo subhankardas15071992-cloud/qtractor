@@ -1,50 +1,95 @@
-```
-# Build artifacts
+# Build directories
 build/
-dist/
+cmake-build-*/
+bin/
+obj/
 *.o
-*.obj
 *.a
 *.so
+*.dylib
 *.dll
+*.lib
 *.exe
-*.out
+*.app/Contents/MacOS/*
+*.app/Contents/Resources/qmlocache/*
 
-# Dependencies
-node_modules/
-venv/
-.venv/
-__pycache__/
-*.egg-info/
-.Python
-
-# CMake specific
-CMakeFiles/
-CMakeCache.txt
-cmake_install.cmake
+# Generated Project Files
+*.pro.user
 Makefile
-*.cmake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+*.vcxproj*
+*.sln
+*.suo
+*.user
+*.idb
+*.pdb
+*.ilk
+*.exp
+*.ipdb
+*.iobj
+*.rsp
+*.manifest
+*.lastbuildstate
 
-# Logs and temp files
+# macOS specific
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+*.dmg
+*.pkg
+
+# Windows specific
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+@eaDir/
+*.lnk
+
+# Qt Creator
+*.creator
+*.creator.user
+*.qmljs
+QmlDebuggingInfo
+
+# VCPKG (Windows)
+vcpkg/
+installed/
+downloads/
+
+# Homebrew / MacPorts temporary files
+/opt/homebrew/var/cache/
+/usr/local/var/cache/
+
+# LV2 / Plugin caches (if generated locally)
+*.lv2
+*.vst3
+*.clap
+!submodules/
+
+# Misc
 *.log
 *.tmp
 *.swp
-
-# Editors
+*.swo
+*~
+.cache/
 .vscode/
 .idea/
-
-# Environment
-.env
-.env.local
-*.env.*
-
-# Coverage
-coverage/
-htmlcov/
-.coverage
-
-# OS
-.DS_Store
-Thumbs.db
-```
